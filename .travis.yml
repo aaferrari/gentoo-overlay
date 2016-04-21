@@ -17,10 +17,6 @@ env:
     global:
         ## configurable variables
         - OVERLAY_NAME='rindeal'
-        - PORTAGE_ROOT="$(mktemp -d --suffix=-portage_root)"
-        ## do not modify these
-        - PORTAGE_CONFIGROOT="${PORTAGE_ROOT}" ROOT="${PORTAGE_ROOT}"
-        - PORTAGE_GRPNAME='root' PORTAGE_USERNAME='root'    # silences crappy warnings
     matrix:
 #        - PORTAGE_VER="2.2.26"
         - PORTAGE_VER="2.2.28"
