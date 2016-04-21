@@ -22,7 +22,7 @@ env:
         - PORTAGE_CONFIGROOT="${PORTAGE_ROOT}" ROOT="${PORTAGE_ROOT}"
         - PORTAGE_GRPNAME='root' PORTAGE_USERNAME='root'    # silences crappy warnings
     matrix:
-        - PORTAGE_VER="2.2.26"
+#        - PORTAGE_VER="2.2.26"
         - PORTAGE_VER="2.2.28"
 
 matrix:
@@ -30,8 +30,8 @@ matrix:
 
 
 install:
-    - .travis/install_portage.sh
-    - export PATH="${PORTAGE_ROOT}/usr/bin:${PATH}"
+    - wget https://github.com/rindeal/travis-ci-for-gentoo-overlays/raw/master/src/source.sh -O /tmp/tcifgo.sh
+    - . /tmp/tcifgo.sh
 
 script:
     - repoman full -d
