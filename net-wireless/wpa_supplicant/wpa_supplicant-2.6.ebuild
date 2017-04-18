@@ -40,6 +40,9 @@ IUSE_A=(
 	+bgscan_simple bgscan_learn
 
 	ap mesh hotspot_2-0 wifi-direct
+
+
+	acs
 )
 
 CDEPEND_A=(
@@ -93,32 +96,8 @@ REQUIRED_USE_A=(
 
 inherit arrays
 
-##
-# Option is enabled if it's present and has some value, disabled if it's commented or not present.
-##
-Kconfig_style_config() {
-	#param 1 is CONFIG_* item
-	#param 2 is what to set it = to, defaulting in y
-	local CONFIG_PARAM="${CONFIG_HEADER:-CONFIG_}$1"
-	local setting="${2:-y}"
-
-	if [[ "${setting,,}" =~ ^(y(es)?|true|1)$ ]] ; then
-		setting='y'
-	elif [[ "${setting,,}" =~ ^(no?|false|0)$ ]] ; then
-		setting='n'
-	fi
-
-	if [[ "${setting}" != 'n' ]] ; then
-		echo "${CONFIG_PARAM^^}=${setting}" >> .config || die
-	else
-		# make sure it's commented out
-		sed -e "/${CONFIG_PARAM^^}=/ s|^|#|" -i -- .config || die
-		echo "#!${CONFIG_PARAM^^}=" >> .config || die
-	fi
-}
-
 src_prepare() {
-	ALL_CONFIG_OPTIONS=( $( grep -h -o -r -P "(?<=(D| ))CONFIG(_[A-Z0-9]{2,}){1,}(?=[^_A-Z0-9])" | sort -u ) )
+	declare -g -r -a -- ALL_CONFIG_OPTIONS=( $( grep -h -o -r -P "(?<=(D| ))CONFIG(_[A-Z0-9]{2,}){1,}(?=[^_A-Z0-9])" | sort -u ) )
 
 	eapply "${FILESDIR}/2.6-quiet-scan-results-message.patch"
 	eapply "${FILESDIR}/2.6-less-aggressive-roaming.patch"
@@ -149,6 +128,33 @@ src_prepare() {
 	epopd # "${PN}"
 }
 
+
+##
+# Option is enabled if it's present and has some value, disabled if it's commented or not present.
+##
+Kconfig_style_config() {
+	#param 1 is CONFIG_* item
+	#param 2 is what to set it = to, defaulting in y
+	local CONFIG_PARAM="${CONFIG_HEADER:-CONFIG_}$1"
+	local setting="${2:-y}"
+
+	eshopts_push nocasematch
+	if [[ "${setting}" =~ ^(y(es)?|true|1)$ ]] ; then
+		setting='y'
+	elif [[ "${setting}" =~ ^(n(o)?|false|0)$ ]] ; then
+		setting='n'
+	fi
+	eshopts_pop
+
+	if [[ "${setting}" != 'n' ]] ; then
+		echo "${CONFIG_PARAM^^}=${setting}" >> .config || die
+	else
+		# make sure it's commented out
+		sed -e "/${CONFIG_PARAM^^}=/ s|^|#|" -i -- .config || die
+		echo "#!${CONFIG_PARAM^^}=" >> .config || die
+	fi
+}
+
 src_configure() {
 	# Toolchain setup
 	tc-export CC
@@ -162,6 +168,7 @@ src_configure() {
 	## Basic setup
 	Kconfig_style_config CTRL_IFACE unix # TODO: make configurable via variable
 	Kconfig_style_config BACKEND file
+	Kconfig_style_config LIBNL20 no
 	Kconfig_style_config LIBNL32
 	{	## dbus
 		Kconfig_style_config CTRL_IFACE_DBUS		$(usex dbus) # old API
@@ -189,15 +196,15 @@ src_configure() {
 	Kconfig_style_config TDLS			$(usex ieee80211z)
 
 	## Drivers
-	Kconfig_style_config DRIVER_ATHEROS	$(usex driver_atheros)
-	Kconfig_style_config DRIVER_HOSTAP	$(usex driver_hostap)
+	Kconfig_style_config DRIVER_ATHEROS		$(usex driver_atheros)
+	Kconfig_style_config DRIVER_HOSTAP		$(usex driver_hostap)
 	Kconfig_style_config DRIVER_MACSEC_QCA	$(usex driver_macsec_qsa)
-	Kconfig_style_config DRIVER_NL80211	$(usex driver_nl80211)
+	Kconfig_style_config DRIVER_NL80211		$(usex driver_nl80211)
 	Kconfig_style_config DRIVER_NL80211_QCA	$(usex driver_nl80211_qca)
-	Kconfig_style_config DRIVER_NONE	$(usex driver_none)
+	Kconfig_style_config DRIVER_NONE		$(usex driver_none)
 	Kconfig_style_config DRIVER_ROBOSWITCH	$(usex driver_roboswitch)
-	Kconfig_style_config DRIVER_WEXT	$(usex driver_wext)
-	Kconfig_style_config DRIVER_WIRED	$(usex driver_wired)
+	Kconfig_style_config DRIVER_WEXT		$(usex driver_wext)
+	Kconfig_style_config DRIVER_WIRED		$(usex driver_wired)
 
 	## Authentication methods
 	Kconfig_style_config EAP_AKA	$(usex eap-aka)
@@ -253,16 +260,28 @@ src_configure() {
 	Kconfig_style_config HS20	$(usex hotspot_2-0) # Hotspot 2.0 (https://en.wikipedia.org/wiki/Hotspot_%28Wi-Fi%29#Hotspot_2.0)
 	Kconfig_style_config AP		$(usex ap)
 
-# 	local o unhandled_options=()
-# 	for o in "${ALL_CONFIG_OPTIONS[@]}" ; do
-# 		if ! grep -q "${o}=" .config ; then
-# 			unhandled_options+=( "${o}" )
-# 		fi
-# 	done
-# 	if (( ${#unhandled_options[*]} )) ; then
-# 		einfo "Unhandled options:"
-# 		printf "%s\n" "${unhandled_options[@]}"
-# 	fi
+
+	## Automatic Channel Selection for atheros cards through the nl80211 driver
+	Kconfig_style_config ACS $(usex acs)
+	## This can be used to enable automatic scan support in wpa_supplicant.
+	# See wpa_supplicant.conf for more information on autoscan usage.
+	Kconfig_style_config AUTOSCAN_EXPONENTIAL $(usex autoscan-exponential)
+	Kconfig_style_config AUTOSCAN_PERIODIC $(usex autoscan-periodic)
+
+
+	local o unhandled_options=()
+	local ignored_options=(
+		ANDROID_LOG ATHEROS_QOS_MAP CONFIG_AUTOSCAN BACKEND_FILE BGSCAN BINDER BORINGSSL CRYPTO_INTERNAL
+	)
+	for o in "${ALL_CONFIG_OPTIONS[@]#CONFIG_}" ; do
+		if ! grep -q "CONFIG_${o}=" .config && ! [[ " ${ignored_options[@]} " == *" ${o} "* ]] ; then
+			unhandled_options+=( "${o#CONFIG_}" )
+		fi
+	done
+	if (( ${#unhandled_options[*]} )) ; then
+		einfo "Unhandled options:"
+		printf "%s\n" "${unhandled_options[@]}"
+	fi
 
 	epopd # "${PN}"
 
